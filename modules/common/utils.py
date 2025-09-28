@@ -14,44 +14,20 @@ from config.app_config import get_bin_path
 
 def find_ffmpeg() -> Optional[str]:
     """查找FFmpeg可执行文件路径"""
-    # 首先检查本地bin目录
+    # 直接使用项目bin目录中的ffmpeg
     local_ffmpeg = get_bin_path() / "ffmpeg.exe"
     if local_ffmpeg.exists():
         return str(local_ffmpeg)
-    
-    # 检查系统PATH
-    try:
-        result = subprocess.run(['where', 'ffmpeg'], 
-                              capture_output=True, text=True, encoding='utf-8', 
-                              errors='ignore', shell=True,
-                              creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-        if result.returncode == 0:
-            return result.stdout.strip().split('\n')[0]
-    except:
-        pass
     
     return None
 
 
 def find_ffprobe() -> Optional[str]:
     """查找FFprobe可执行文件路径"""
-    # 首先检查本地bin目录
+    # 直接使用项目bin目录中的ffprobe
     local_ffprobe = get_bin_path() / "ffprobe.exe"
     if local_ffprobe.exists():
         return str(local_ffprobe)
-    
-    # 检查系统PATH
-    candidates = ["ffprobe", "ffprobe.exe"]
-    for c in candidates:
-        try:
-            subprocess.run([c, "-version"], 
-                         stdout=subprocess.DEVNULL, 
-                         stderr=subprocess.DEVNULL, 
-                         check=True,
-                         creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-            return c
-        except Exception:
-            pass
     
     return None
 

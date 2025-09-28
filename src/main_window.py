@@ -630,7 +630,7 @@ class MainWindow(QMainWindow):
         use = self.subtitle_use_duration_cb.isChecked()
         self.subtitle_renamer = SubtitleRenamer(use_duration=use)
         if use and not find_ffprobe():
-            self._show_message_box("information", APP_NAME, "未检测到 ffprobe，将忽略时长匹配。\n可安装 FFmpeg 后重试。")
+            self._show_message_box("information", APP_NAME, "未检测到 ffprobe，将忽略时长匹配。\n请确保 ffprobe.exe 位于程序的 bin 目录中。")
     
     def scan_subtitles(self):
         """扫描字幕和视频文件"""
@@ -801,8 +801,7 @@ def main():
             show_message_box_with_icon(
                 "critical", "错误", 
                 f"找不到 FFmpeg 程序！\n\n"
-                f"请确保 ffmpeg.exe 位于程序的 bin 目录中，\n"
-                f"或者将 FFmpeg 添加到系统 PATH 环境变量中。"
+                f"请确保 ffmpeg.exe 位于程序的 bin 目录中。"
             )
             sys.exit(1)
         
