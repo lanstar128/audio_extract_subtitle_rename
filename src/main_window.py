@@ -38,7 +38,7 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
         
         # 设置窗口图标
-        icon_path = get_images_path() / "video_audio_extractor.png"
+        icon_path = get_images_path() / "logo.ico"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
         
@@ -63,7 +63,7 @@ class MainWindow(QMainWindow):
     
     def _get_icon(self):
         """获取应用图标"""
-        icon_path = get_images_path() / "video_audio_extractor.png"
+        icon_path = get_images_path() / "logo.ico"
         if icon_path.exists():
             return QIcon(str(icon_path))
         return QIcon()
@@ -759,7 +759,7 @@ class MainWindow(QMainWindow):
 
 def show_message_box_with_icon(message_type, title, text, parent=None):
     """显示带图标的消息框"""
-    icon_path = get_images_path() / "video_audio_extractor.png"
+    icon_path = get_images_path() / "logo.ico"
     icon = QIcon(str(icon_path)) if icon_path.exists() else QIcon()
     
     msg = QMessageBox(parent)
@@ -780,22 +780,34 @@ def show_message_box_with_icon(message_type, title, text, parent=None):
 def main():
     """主函数"""
     try:
+        # 设置环境变量支持中文
+        if sys.platform.startswith('win'):
+            os.environ['PYTHONIOENCODING'] = 'utf-8'
+        
+        print("Starting application...")  # 调试信息
+        
         app = QApplication(sys.argv)
         app.setApplicationName(APP_NAME)
         app.setApplicationVersion(APP_VERSION)
         
+        print("Application created successfully")  # 调试信息
+        
         # 检查激活状态
         activation_manager = ActivationManager()
         is_activated, activated_phone = activation_manager.check_activation_status()
+        
+        print(f"Activation status: {is_activated}")  # 调试信息
         
         if not is_activated:
             # 显示激活对话框
             activation_dialog = ActivationDialog()
             if activation_dialog.exec() != QDialog.DialogCode.Accepted:
                 # 用户取消激活或激活失败，退出程序
+                print("Activation cancelled or failed")
                 sys.exit(0)
         
         # 检查ffmpeg是否可用
+        print("Checking ffmpeg...")  # 调试信息
         ffmpeg_path = find_ffmpeg()
         if not ffmpeg_path:
             show_message_box_with_icon(
@@ -833,7 +845,12 @@ def main():
         sys.exit(0)
     except Exception as e:
         # 处理其他未预期的异常
-        print(f"\n程序发生错误：{e}")
+        import traceback
+        print(f"\nApplication error: {e}")
+        print("Full traceback:")
+        traceback.print_exc()
+        print("\nPress Enter to exit...")
+        input()  # 等待用户按键，防止控制台立即关闭
         sys.exit(1)
 
 

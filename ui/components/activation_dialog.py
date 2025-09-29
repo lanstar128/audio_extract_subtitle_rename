@@ -25,7 +25,7 @@ class ActivationDialog(QDialog):
     
     def _get_icon(self):
         """获取应用图标"""
-        icon_path = get_images_path() / "video_audio_extractor.png"
+        icon_path = get_images_path() / "logo.ico"
         if icon_path.exists():
             return QIcon(str(icon_path))
         return QIcon()
@@ -53,7 +53,7 @@ class ActivationDialog(QDialog):
         self.setModal(True)
         
         # 设置窗口图标
-        icon_path = get_images_path() / "video_audio_extractor.png"
+        icon_path = get_images_path() / "logo.ico"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
         
