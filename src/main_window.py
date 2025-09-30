@@ -7,6 +7,8 @@
 import sys
 import os
 import time
+import subprocess
+import platform
 from pathlib import Path
 from typing import Optional
 
@@ -14,7 +16,7 @@ from PyQt6.QtWidgets import (QMainWindow, QTabWidget, QVBoxLayout, QHBoxLayout,
                              QWidget, QPushButton, QLabel, QLineEdit, QProgressBar,
                              QTextEdit, QFileDialog, QCheckBox, QSpinBox, QGroupBox,
                              QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView,
-                             QStatusBar, QFrame, QApplication, QDialog)
+                             QStatusBar, QFrame, QApplication, QDialog, QMenu)
 from PyQt6.QtCore import QTimer, Qt, QUrl
 from PyQt6.QtGui import QIcon, QDesktopServices, QDragEnterEvent, QDropEvent, QColor
 
@@ -329,6 +331,10 @@ class MainWindow(QMainWindow):
         self.subtitle_table.setAlternatingRowColors(False)
         self.subtitle_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.subtitle_table.verticalHeader().setVisible(False)
+        
+        # 设置右键菜单
+        self.subtitle_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.subtitle_table.customContextMenuRequested.connect(self.show_subtitle_context_menu)
         
         # 设置行高
         self.subtitle_table.verticalHeader().setDefaultSectionSize(32)
@@ -719,6 +725,68 @@ class MainWindow(QMainWindow):
             self.subtitle_table.setItem(r, 1, sub_item)
             self.subtitle_table.setItem(r, 2, result_item)
             self.subtitle_table.setItem(r, 3, rename_item)
+    
+    def show_subtitle_context_menu(self, position):
+        """显示字幕表格右键菜单"""
+        item = self.subtitle_table.itemAt(position)
+        if item is None:
+            return
+        
+        row = item.row()
+        if row >= len(self.subtitle_plan):
+            return
+        
+        plan_row = self.subtitle_plan[row]
+        column = item.column()
+        
+        menu = QMenu(self)
+        
+        # 根据点击的列确定文件路径
+        file_path = None
+        if column == 0 and plan_row.video:  # 视频文件列
+            file_path = plan_row.video.path
+            menu.addAction("打开视频文件位置", lambda: self.open_file_location(file_path))
+        elif column == 1 and plan_row.sub:  # 字幕文件列
+            file_path = plan_row.sub.path
+            menu.addAction("打开字幕文件位置", lambda: self.open_file_location(file_path))
+        
+        # 如果有文件路径才显示菜单
+        if file_path and file_path.exists():
+            menu.exec(self.subtitle_table.mapToGlobal(position))
+    
+    def open_file_location(self, file_path):
+        """打开文件位置并选中文件"""
+        if not file_path or not file_path.exists():
+            self._show_message_box("warning", "提示", "文件不存在或路径无效！")
+            return
+        
+        try:
+            system = platform.system()
+            if system == "Windows":
+                # Windows: 使用 explorer /select 命令
+                subprocess.run(['explorer', '/select,', str(file_path)])
+            elif system == "Darwin":  # macOS
+                # macOS: 使用 open -R 命令
+                subprocess.run(['open', '-R', str(file_path)])
+            elif system == "Linux":
+                # Linux: 使用文件管理器打开包含文件的目录
+                # 先尝试使用 nautilus --select-filename
+                try:
+                    subprocess.run(['nautilus', '--select-filename', str(file_path)])
+                except FileNotFoundError:
+                    # 如果 nautilus 不可用，尝试其他文件管理器
+                    try:
+                        subprocess.run(['dolphin', '--select', str(file_path)])
+                    except FileNotFoundError:
+                        # 最后尝试用默认方式打开目录
+                        subprocess.run(['xdg-open', str(file_path.parent)])
+            else:
+                # 未知系统，尝试用默认方式打开父目录
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(file_path.parent)))
+        except FileNotFoundError:
+            self._show_message_box("warning", "错误", "无法找到系统文件管理器！")
+        except Exception as e:
+            self._show_message_box("warning", "错误", f"无法打开文件位置：{str(e)}")
     
     def apply_subtitle_rename(self):
         """应用字幕重命名计划"""
