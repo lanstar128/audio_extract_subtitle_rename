@@ -8,11 +8,17 @@ import json
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
-
-from rapidfuzz import fuzz
+from difflib import SequenceMatcher
 
 from config.app_config import VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS, LOG_FILE_NAME
-from modules.common.utils import extract_episode_tokens, get_media_duration
+
+# 预定义字幕后缀列表
+SUBTITLE_SUFFIXES = [
+    '_原文', '_原版', '_英文', '_中文', '_简体', '_繁体',
+    '_subtitle', '_sub', '_srt', '_ass', '_vtt',
+    '_zh', '_en', '_chs', '_cht', '_jpn', '_kor',
+    '_1', '_2', '_3', '_4', '_5'
+]
 
 
 @dataclass
@@ -21,15 +27,13 @@ class FileItem:
     path: Path
     stem: str
     ext: str
-    episodes: List[int]
-    duration: Optional[float] = None
 
 
 @dataclass
 class PlanRow:
     """重命名计划行"""
-    sub: FileItem
-    video: Optional[FileItem]
+    sub: Optional[FileItem]  # 字幕文件，可为空（只有视频文件时）
+    video: Optional[FileItem]  # 视频文件，可为空（只有字幕文件时）
     target_name: Optional[str]
     reason: str  # 匹配说明/跳过原因
 
@@ -37,8 +41,42 @@ class PlanRow:
 class SubtitleRenamer:
     """字幕重命名器"""
     
-    def __init__(self, use_duration: bool = False):
-        self.use_duration = use_duration
+    def __init__(self):
+        pass
+    
+    def _try_suffix_match(self, subtitle_stem: str, video_dict: Dict[str, FileItem]) -> Optional[Tuple[FileItem, str]]:
+        """尝试后缀匹配
+        
+        Returns:
+            Optional[Tuple[FileItem, str]]: (匹配的视频文件, 清理后的文件名) 或 None
+        """
+        for suffix in SUBTITLE_SUFFIXES:
+            if subtitle_stem.endswith(suffix):
+                cleaned_name = subtitle_stem[:-len(suffix)]
+                if cleaned_name in video_dict:
+                    return video_dict[cleaned_name], cleaned_name
+        return None
+    
+    def _try_similarity_match(self, subtitle_stem: str, video_dict: Dict[str, FileItem], threshold: float = 0.7) -> Optional[Tuple[FileItem, str, float]]:
+        """尝试相似度匹配
+        
+        Returns:
+            Optional[Tuple[FileItem, str, float]]: (匹配的视频文件, 视频文件名, 相似度) 或 None
+        """
+        best_match = None
+        best_ratio = 0.0
+        best_video = None
+        
+        for video_stem, video_item in video_dict.items():
+            ratio = SequenceMatcher(None, subtitle_stem, video_stem).ratio()
+            if ratio > best_ratio and ratio >= threshold:
+                best_ratio = ratio
+                best_match = video_stem
+                best_video = video_item
+        
+        if best_match:
+            return best_video, best_match, best_ratio
+        return None
     
     def scan_files(self, root: Path) -> Tuple[List[FileItem], List[FileItem]]:
         """扫描视频和字幕文件"""
@@ -53,13 +91,8 @@ class SubtitleRenamer:
                 item = FileItem(
                     path=p, 
                     stem=p.stem, 
-                    ext=ext, 
-                    episodes=extract_episode_tokens(p.stem)
+                    ext=ext
                 )
-                
-                # 如果启用了时长匹配且是视频文件，获取时长
-                if self.use_duration and ext in VIDEO_EXTENSIONS:
-                    item.duration = get_media_duration(p)
                 
                 if ext in VIDEO_EXTENSIONS:
                     videos.append(item)
@@ -71,60 +104,78 @@ class SubtitleRenamer:
     def build_plan(self, videos: List[FileItem], subs: List[FileItem]) -> List[PlanRow]:
         """构建重命名计划"""
         plan: List[PlanRow] = []
-        video_by_episode: Dict[int, List[FileItem]] = {}
         
-        # 按剧集编号分组视频
+        # 为视频文件建立索引，便于查找
+        video_dict = {}
         for v in videos:
-            for ep in v.episodes:
-                video_by_episode.setdefault(ep, []).append(v)
+            # 使用文件名（不含扩展名）作为键
+            video_dict[v.stem] = v
         
+        # 为字幕文件建立索引，用于检测只有视频文件的情况
+        sub_dict = {}
         for s in subs:
-            matched: Optional[FileItem] = None
+            sub_dict[s.stem] = s
+        
+        # 处理字幕文件（原有逻辑）
+        for s in subs:
+            matched_video: Optional[FileItem] = None
+            target_name: Optional[str] = None
             reason = ""
             
-            # 1) 先尝试剧集编号匹配
-            for ep in s.episodes:
-                if ep in video_by_episode:
-                    candidates = video_by_episode[ep]
-                    # 若有多个候选，按与字幕同目录优先、再按模糊度
-                    candidates_sorted = sorted(
-                        candidates,
-                        key=lambda v: (
-                            0 if v.path.parent == s.path.parent else 1,
-                            -fuzz.ratio(v.stem, s.stem)
-                        )
-                    )
-                    matched = candidates_sorted[0]
-                    reason = f"编号匹配(E{ep})"
-                    break
-            
-            # 2) 再做模糊匹配
-            if not matched:
-                best_v = None
-                best_score = -1
-                for v in videos:
-                    score = fuzz.token_set_ratio(v.stem, s.stem)
-                    # 同目录加成
-                    if v.path.parent == s.path.parent:
-                        score += 5
-                    if score > best_score:
-                        best_score, best_v = score, v
-                if best_v and best_score >= 60:  # 经验阈值
-                    matched = best_v
-                    reason = f"模糊匹配(相似度 {best_score})"
-            
-            # 3) 可选时长匹配
-            if self.use_duration and matched and matched.duration is not None:
-                # 这里可以进一步验证时长匹配
-                # 字幕文件时长估算需要解析字幕内容，暂时跳过
-                pass
-            
-            if matched:
-                new_stem = matched.stem
-                target = str(s.path.with_name(new_stem + s.ext).name)
-                plan.append(PlanRow(sub=s, video=matched, target_name=target, reason=reason))
+            # 1. 精确匹配：字幕文件名与视频文件名完全一致
+            if s.stem in video_dict:
+                matched_video = video_dict[s.stem]
+                reason = "已有字幕"
+                target_name = None  # 不需要重命名
             else:
-                plan.append(PlanRow(sub=s, video=None, target_name=None, reason="未匹配到视频，保留原名"))
+                # 2. 后缀匹配：尝试移除预定义后缀后匹配
+                suffix_match = self._try_suffix_match(s.stem, video_dict)
+                if suffix_match:
+                    matched_video, cleaned_name = suffix_match
+                    target_name = cleaned_name + s.ext
+                    reason = "需要重命名"
+                else:
+                    # 3. 相似度匹配：使用字符串相似度算法
+                    similarity_match = self._try_similarity_match(s.stem, video_dict)
+                    if similarity_match:
+                        matched_video, video_stem, ratio = similarity_match
+                        target_name = video_stem + s.ext
+                        reason = "确认字幕是否正确"
+                    else:
+                        # 4. 无匹配
+                        reason = "未匹配到视频"
+            
+            plan.append(PlanRow(
+                sub=s, 
+                video=matched_video, 
+                target_name=target_name, 
+                reason=reason
+            ))
+        
+        # 处理只有视频文件没有字幕文件的情况
+        for v in videos:
+            # 检查该视频文件是否已有对应的字幕文件
+            if v.stem not in sub_dict:
+                # 检查是否有带后缀的字幕文件匹配这个视频
+                has_related_subtitle = False
+                for sub_stem in sub_dict.keys():
+                    for suffix in SUBTITLE_SUFFIXES:
+                        if sub_stem.endswith(suffix):
+                            cleaned_name = sub_stem[:-len(suffix)]
+                            if cleaned_name == v.stem:
+                                has_related_subtitle = True
+                                break
+                    if has_related_subtitle:
+                        break
+                
+                # 如果没有任何相关字幕文件，则添加到计划中
+                if not has_related_subtitle:
+                    plan.append(PlanRow(
+                        sub=None,  # 没有字幕文件
+                        video=v,
+                        target_name=None,
+                        reason="缺少字幕文件"
+                    ))
         
         return plan
     
@@ -139,7 +190,7 @@ class SubtitleRenamer:
         conflicts: List[str] = []
         
         for row in plan:
-            if not row.video or not row.target_name:
+            if not row.sub or not row.video or not row.target_name:
                 continue
             
             src = row.sub.path

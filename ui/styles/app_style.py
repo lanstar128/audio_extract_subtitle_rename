@@ -17,7 +17,7 @@ COLORS = {
     'border_focus': '#0969da',
     'success': '#2da44e',
     'warning': '#ffd666',
-    'warning_bg': '#3a2e10',
+    'warning_bg': '#4CAF50',
     'error': '#da3633',
     'disabled': '#f5f5f5',
     'disabled_text': '#a8a8a8',
@@ -278,20 +278,35 @@ QTableWidget, QTableView {{
     background-color: {COLORS['background']};
     color: {COLORS['text']};
     border: 1px solid {COLORS['border']};
-    border-radius: 8px;
-    padding: 6px;
     gridline-color: {COLORS['border']};
-    selection-background-color: {COLORS['primary']};
-    selection-color: {COLORS['background']};
+    selection-background-color: rgba(0, 122, 255, 0.1);
+    selection-color: {COLORS['text']};
+    font-size: 13px;
+    show-decoration-selected: 0;
+    outline: none;
+}}
+
+QTableWidget::item {{
+    padding: 8px 12px;
+    border: none;
+    outline: none;
+}}
+
+QTableWidget::item:selected {{
+    background-color: rgba(0, 122, 255, 0.1);
+    color: {COLORS['text']};
+    border: none;
+    outline: none;
 }}
 
 QHeaderView::section {{
     background-color: {COLORS['background_alt']};
     color: {COLORS['text']};
-    padding: 8px;
+    padding: 10px 12px;
     border: none;
     border-bottom: 1px solid {COLORS['border']};
     font-weight: 600;
+    font-size: 13px;
 }}
 
 /* 滚动条样式 */

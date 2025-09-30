@@ -47,7 +47,7 @@ class MainWindow(QMainWindow):
         
         # 初始化组件
         self.audio_extractor: Optional[AudioExtractor] = None
-        self.subtitle_renamer = SubtitleRenamer(use_duration=False)
+        self.subtitle_renamer = SubtitleRenamer()
         
         # 音频提取相关状态
         self.audio_start_time = 0
@@ -287,7 +287,7 @@ class MainWindow(QMainWindow):
         subtitle_browse_btn.setObjectName("browse_btn")
         subtitle_browse_btn.clicked.connect(self.browse_subtitle_folder)
         
-        self.subtitle_use_duration_cb = QCheckBox("启用时长匹配（需安装 ffprobe）")
+        self.subtitle_use_duration_cb = QCheckBox("启用时长匹配")
         self.subtitle_use_duration_cb.stateChanged.connect(self.on_subtitle_duration_toggle)
         
         top.addWidget(self.subtitle_dir_edit, 1)
@@ -310,12 +310,29 @@ class MainWindow(QMainWindow):
         layout.addLayout(ops)
         
         # 计划表
-        self.subtitle_table = QTableWidget(0, 5)
-        self.subtitle_table.setHorizontalHeaderLabels(["字幕原文件", "目标视频", "重命名为", "结果", "说明"])
-        self.subtitle_table.horizontalHeader().setStretchLastSection(True)
-        self.subtitle_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.subtitle_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.subtitle_table = QTableWidget(0, 4)
+        self.subtitle_table.setHorizontalHeaderLabels(["视频", "字幕", "识别结果", "字幕重命名为"])
+        
+        # 设置自适应列宽
+        header = self.subtitle_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # 视频列
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # 字幕列
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)             # 识别结果列
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)           # 字幕重命名为列
+        
+        # 设置固定宽度
+        self.subtitle_table.setColumnWidth(2, 150)  # 识别结果列固定150px
+        
+        # 设置表格属性
         self.subtitle_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.subtitle_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.subtitle_table.setAlternatingRowColors(False)
+        self.subtitle_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.subtitle_table.verticalHeader().setVisible(False)
+        
+        # 设置行高
+        self.subtitle_table.verticalHeader().setDefaultSectionSize(32)
+        
         layout.addWidget(self.subtitle_table, 1)
         
         return tab
@@ -627,10 +644,8 @@ class MainWindow(QMainWindow):
     
     def on_subtitle_duration_toggle(self):
         """字幕时长匹配选项切换"""
-        use = self.subtitle_use_duration_cb.isChecked()
-        self.subtitle_renamer = SubtitleRenamer(use_duration=use)
-        if use and not find_ffprobe():
-            self._show_message_box("information", APP_NAME, "未检测到 ffprobe，将忽略时长匹配。\n请确保 ffprobe.exe 位于程序的 bin 目录中。")
+        # 简化后的重命名器不再使用时长匹配功能
+        pass
     
     def scan_subtitles(self):
         """扫描字幕和视频文件"""
@@ -656,31 +671,62 @@ class MainWindow(QMainWindow):
         for row in plan:
             r = self.subtitle_table.rowCount()
             self.subtitle_table.insertRow(r)
-            sub_item = QTableWidgetItem(str(row.sub.path.name))
-            vid_item = QTableWidgetItem(row.video.path.name if row.video else "——")
-            tgt_item = QTableWidgetItem(row.target_name or "——")
-            res_item = QTableWidgetItem("预览")
-            why_item = QTableWidgetItem(row.reason)
             
-            # 配色：未匹配标黄
+            # 视频文件列
+            vid_item = QTableWidgetItem(row.video.path.name if row.video else "")
+            
+            # 字幕文件列
+            sub_item = QTableWidgetItem(row.sub.path.name if row.sub else "")
+            
+            # 识别结果列 - 更新为新的标识文字
+            result_text = row.reason  # 直接使用 renamer.py 中的标识文字
+            result_item = QTableWidgetItem(result_text)
+            
+            # 字幕重命名为列
+            if row.target_name:
+                rename_text = row.target_name
+            elif row.reason == "已有字幕":
+                rename_text = "无需重命名"
+            elif row.reason == "缺少字幕文件":
+                rename_text = "需要字幕文件"
+            else:
+                rename_text = ""
+            rename_item = QTableWidgetItem(rename_text)
+            
+            # 配色：根据识别结果设置不同的提示色彩
             if not row.video:
-                for it in (sub_item, vid_item, tgt_item, res_item, why_item):
-                    it.setBackground(QColor("#3a2e10"))
-                    it.setForeground(QColor("#ffd666"))
+                # 未匹配到视频：浅红色背景
+                for it in (vid_item, sub_item, result_item, rename_item):
+                    it.setBackground(QColor("#ffebee"))  # 浅红色背景
+                    it.setForeground(QColor("#c62828"))  # 深红色文字
+            elif not row.sub:
+                # 缺少字幕文件：浅蓝色背景
+                for it in (vid_item, sub_item, result_item, rename_item):
+                    it.setBackground(QColor("#e3f2fd"))  # 浅蓝色背景
+                    it.setForeground(QColor("#1565c0"))  # 蓝色文字
+            elif row.reason == "确认字幕是否正确":
+                # 相似度匹配：浅橙色背景提醒用户确认
+                for it in (vid_item, sub_item, result_item, rename_item):
+                    it.setBackground(QColor("#fff3e0"))  # 浅橙色背景
+                    it.setForeground(QColor("#ef6c00"))  # 橙色文字
+            elif row.reason == "已有字幕":
+                # 已有字幕：浅绿色背景
+                for it in (vid_item, sub_item, result_item, rename_item):
+                    it.setBackground(QColor("#e8f5e8"))  # 浅绿色背景
+                    it.setForeground(QColor("#2e7d32"))  # 绿色文字
             
-            self.subtitle_table.setItem(r, 0, sub_item)
-            self.subtitle_table.setItem(r, 1, vid_item)
-            self.subtitle_table.setItem(r, 2, tgt_item)
-            self.subtitle_table.setItem(r, 3, res_item)
-            self.subtitle_table.setItem(r, 4, why_item)
+            self.subtitle_table.setItem(r, 0, vid_item)
+            self.subtitle_table.setItem(r, 1, sub_item)
+            self.subtitle_table.setItem(r, 2, result_item)
+            self.subtitle_table.setItem(r, 3, rename_item)
     
     def apply_subtitle_rename(self):
         """应用字幕重命名计划"""
         if not self.subtitle_plan:
             return
         
-        # 预估任务数量
-        task_count = sum(1 for row in self.subtitle_plan if row.video and row.target_name)
+        # 预估任务数量（只计算有字幕文件的重命名任务）
+        task_count = sum(1 for row in self.subtitle_plan if row.sub and row.video and row.target_name)
         
         if task_count == 0:
             self._show_message_box("information", APP_NAME, "没有可执行的重命名任务（可能存在冲突或未匹配项）。")
