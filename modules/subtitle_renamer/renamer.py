@@ -21,6 +21,44 @@ SUBTITLE_SUFFIXES = [
 ]
 
 
+def truncate_filename(filename: str, max_length: int = 35, head_chars: int = 10, tail_chars: int = 10) -> str:
+    """
+    智能截断长文件名，保留开头和结尾部分
+    
+    Args:
+        filename: 完整文件名（包含扩展名）
+        max_length: 最大显示长度，超过此长度才截断
+        head_chars: 开头保留字符数
+        tail_chars: 结尾保留字符数（不含扩展名）
+    
+    Returns:
+        截断后的文件名，格式为 "开头...结尾.扩展名"
+    
+    Examples:
+        >>> truncate_filename("5021e8fe6905df2ba70ba42afd0584a5.mp4", 30, 10, 8)
+        "5021e8fe69...fd0584a5.mp4"
+        >>> truncate_filename("short.mp4", 30, 10, 8)
+        "short.mp4"
+    """
+    if len(filename) <= max_length:
+        return filename
+    
+    # 分离文件名和扩展名
+    path_obj = Path(filename)
+    stem = path_obj.stem  # 文件名（不含扩展名）
+    ext = path_obj.suffix  # 扩展名（包含点号）
+    
+    # 如果文件名本身就很短，不需要截断
+    if len(stem) <= (head_chars + tail_chars + 3):  # 3是"..."的长度
+        return filename
+    
+    # 截断文件名：保留开头和结尾
+    head = stem[:head_chars]
+    tail = stem[-tail_chars:] if tail_chars > 0 else ""
+    
+    return f"{head}...{tail}{ext}"
+
+
 @dataclass
 class FileItem:
     """文件项数据类"""

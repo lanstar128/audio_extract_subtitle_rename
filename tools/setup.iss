@@ -11,7 +11,7 @@ AllowNoIcons=yes
 LicenseFile=
 InfoAfterFile=
 OutputDir=..\installer
-OutputBaseFilename=audio_subtitle_tools_v2.0.0_installer
+OutputBaseFilename=视频处理工具集_v2.0.0_安装包
 SetupIconFile=..\resources\images\logo.ico
 Compression=lzma
 SolidCompression=yes
@@ -26,8 +26,8 @@ UninstallDisplayIcon={app}\audio_subtitle_tools.exe
 Name: "chinesesimp"; MessagesFile: "ChineseSimplified.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Create desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
-Name: "quicklaunchicon"; Description: "Create quick launch shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked; OnlyBelowVersion: 6.1
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1
 
 [Files]
 Source: "..\dist\audio_subtitle_tools\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

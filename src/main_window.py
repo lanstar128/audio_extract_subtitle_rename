@@ -25,7 +25,7 @@ from ui.styles.app_style import APP_STYLE
 from ui.components.activation_dialog import ActivationDialog
 from modules.common.activation import ActivationManager
 from modules.audio_extractor.extractor import AudioExtractor, ProcessResult
-from modules.subtitle_renamer.renamer import SubtitleRenamer, PlanRow
+from modules.subtitle_renamer.renamer import SubtitleRenamer, PlanRow, truncate_filename
 from modules.common.utils import find_ffmpeg, find_ffprobe
 
 
@@ -678,26 +678,36 @@ class MainWindow(QMainWindow):
             r = self.subtitle_table.rowCount()
             self.subtitle_table.insertRow(r)
             
-            # 视频文件列
-            vid_item = QTableWidgetItem(row.video.path.name if row.video else "")
+            # 视频文件列 - 使用截断显示
+            vid_name = row.video.path.name if row.video else ""
+            vid_item = QTableWidgetItem(truncate_filename(vid_name) if vid_name else "")
+            if vid_name:
+                vid_item.setToolTip(vid_name)  # 悬停显示完整文件名
             
-            # 字幕文件列
-            sub_item = QTableWidgetItem(row.sub.path.name if row.sub else "")
+            # 字幕文件列 - 使用截断显示
+            sub_name = row.sub.path.name if row.sub else ""
+            sub_item = QTableWidgetItem(truncate_filename(sub_name) if sub_name else "")
+            if sub_name:
+                sub_item.setToolTip(sub_name)  # 悬停显示完整文件名
             
             # 识别结果列 - 更新为新的标识文字
             result_text = row.reason  # 直接使用 renamer.py 中的标识文字
             result_item = QTableWidgetItem(result_text)
             
-            # 字幕重命名为列
+            # 字幕重命名为列 - 使用截断显示
             if row.target_name:
-                rename_text = row.target_name
+                rename_text = truncate_filename(row.target_name)
+                rename_item = QTableWidgetItem(rename_text)
+                rename_item.setToolTip(row.target_name)  # 悬停显示完整文件名
             elif row.reason == "已有字幕":
                 rename_text = "无需重命名"
+                rename_item = QTableWidgetItem(rename_text)
             elif row.reason == "缺少字幕文件":
                 rename_text = "需要字幕文件"
+                rename_item = QTableWidgetItem(rename_text)
             else:
                 rename_text = ""
-            rename_item = QTableWidgetItem(rename_text)
+                rename_item = QTableWidgetItem(rename_text)
             
             # 配色：根据识别结果设置不同的提示色彩
             if not row.video:
