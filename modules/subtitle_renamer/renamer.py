@@ -274,3 +274,4 @@ class SubtitleRenamer:
         
         log_path.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
         return True, restored, ""
+

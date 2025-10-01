@@ -53,3 +53,4 @@ def get_resources_path():
 def get_images_path():
     """获取图像资源目录"""
     return get_resources_path() / "images"
+

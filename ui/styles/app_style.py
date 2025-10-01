@@ -431,3 +431,4 @@ QGroupBox::title {
     color: #e4e6eb;
 }
 """
+

@@ -262,3 +262,4 @@ class ActivationManager:
                 return os.geteuid() == 0
         except Exception:
             return False
+

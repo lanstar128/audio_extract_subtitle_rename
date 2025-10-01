@@ -380,7 +380,7 @@ class AudioExtractor(QThread):
         elif volume_analysis.audio_type == "unknown":
             reasons.append("音频检测失败")
         elif needs_channel_fix:
-            reasons.append(f"伪立体声修复({volume_analysis.audio_type})")
+            reasons.append(f"伪立体声合并声道({volume_analysis.audio_type})")
         elif not format_supported:
             reasons.append(f"格式不支持({stream_info.codec})")
         elif stream_info.codec.startswith('pcm_'):
@@ -520,15 +520,10 @@ class AudioExtractor(QThread):
                     str(output_file)
                 ]
             elif decision.needs_channel_fix:
-                # 需要修复伪立体声
-                if volume_analysis.audio_type == "pseudo_stereo_left":
-                    # 用左声道填充右声道
-                    audio_filter = "pan=stereo|c0=c0|c1=c0"
-                elif volume_analysis.audio_type == "pseudo_stereo_right":
-                    # 用右声道填充左声道
-                    audio_filter = "pan=stereo|c0=c1|c1=c1"
-                else:
-                    audio_filter = ""
+                # 需要修复伪立体声 - 合并两个声道
+                # 将左右声道混合后输出到两个声道，避免因误判而丢失音频
+                # 例如：对话场景中，即使开头只有一人说话，后续另一人说话时也不会丢失
+                audio_filter = "pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1"
                 
                 cmd = [
                     self.ffmpeg_path,
