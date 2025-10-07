@@ -31,8 +31,8 @@ MAX_FILE_SIZE_MB = 500  # 超过此大小将转码为MP3
 DEFAULT_THREADS = 4
 MAX_THREADS = 32
 
-# 激活系统配置
-SECRET_KEY = "VideoAudioExtractor_2024_Secret_Key"
+# API 服务器配置
+API_BASE_URL = "https://your-domain.com/api/v1"  # TODO: 替换为实际的服务器地址
 
 # 日志配置
 LOG_FILE_NAME = ".processing_log.json"

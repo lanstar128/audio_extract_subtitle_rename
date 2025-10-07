@@ -49,7 +49,7 @@ refactor_project/
 │
 ├── 📁 modules/                    # 功能模块
 │   ├── common/                    # 通用模块
-│   │   ├── activation.py          # 激活管理
+│   │   ├── login_manager.py       # 登录管理
 │   │   ├── utils.py               # 工具函数
 │   │   └── __init__.py
 │   ├── audio_extractor/           # 音频提取模块
@@ -62,7 +62,7 @@ refactor_project/
 │
 ├── 📁 ui/                         # 用户界面
 │   ├── components/                # UI组件
-│   │   ├── activation_dialog.py   # 激活对话框
+│   │   ├── login_dialog.py        # 登录对话框
 │   │   └── __init__.py
 │   ├── styles/                    # 样式文件
 │   │   ├── app_style.py           # 应用样式
@@ -143,7 +143,7 @@ refactor_project/
 
 ## 🛡️ 安全特性
 
-- **激活系统**：基于手机号的安全激活机制
+- **登录系统**：基于服务器API的账号密码登录认证
 - **权限管理**：智能处理文件权限问题
 - **数据保护**：操作前自动备份，确保数据安全
 - **错误恢复**：完善的错误处理和恢复机制

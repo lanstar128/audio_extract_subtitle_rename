@@ -22,8 +22,8 @@ from PyQt6.QtGui import QIcon, QDesktopServices, QDragEnterEvent, QDropEvent, QC
 
 from config.app_config import APP_NAME, APP_VERSION, get_images_path
 from ui.styles.app_style import APP_STYLE
-from ui.components.activation_dialog import ActivationDialog
-from modules.common.activation import ActivationManager
+from ui.components.login_dialog import LoginDialog
+from modules.common.login_manager import LoginManager
 from modules.audio_extractor.extractor import AudioExtractor, ProcessResult
 from modules.subtitle_renamer.renamer import SubtitleRenamer, PlanRow, truncate_filename
 from modules.common.utils import find_ffmpeg, find_ffprobe
@@ -916,19 +916,22 @@ def main():
         
         print("Application created successfully")  # 调试信息
         
-        # 检查激活状态
-        activation_manager = ActivationManager()
-        is_activated, activated_phone = activation_manager.check_activation_status()
+        # 检查登录状态
+        login_manager = LoginManager()
+        is_logged_in, logged_phone, user_data = login_manager.check_login_status()
         
-        print(f"Activation status: {is_activated}")  # 调试信息
+        print(f"Login status: {is_logged_in}")  # 调试信息
         
-        if not is_activated:
-            # 显示激活对话框
-            activation_dialog = ActivationDialog()
-            if activation_dialog.exec() != QDialog.DialogCode.Accepted:
-                # 用户取消激活或激活失败，退出程序
-                print("Activation cancelled or failed")
+        if not is_logged_in:
+            # 显示登录对话框
+            login_dialog = LoginDialog()
+            if login_dialog.exec() != QDialog.DialogCode.Accepted:
+                # 用户取消登录或登录失败，退出程序
+                print("Login cancelled or failed")
                 sys.exit(0)
+            
+            # 获取登录后的用户数据
+            user_data = login_dialog.get_user_data()
         
         # 检查ffmpeg是否可用
         print("Checking ffmpeg...")  # 调试信息
@@ -944,20 +947,23 @@ def main():
         # 创建并显示主窗口
         window = MainWindow()
         
-        # 如果是首次激活，显示欢迎信息
-        if not is_activated:
-            _, current_phone = activation_manager.check_activation_status()
-            if current_phone:
-                show_message_box_with_icon(
-                    "information", "欢迎使用", 
-                    f"🎉 欢迎使用{APP_NAME}！\n\n"
-                    f"激活手机号：{current_phone}\n\n"
-                    f"感谢您购买我们的产品，这个工具是我们赠送给您的专属礼品。\n\n"
-                    f"功能说明：\n"
-                    f"• 音频提取：从视频文件中提取高质量音频\n"
-                    f"• 字幕重命名：智能匹配并重命名字幕文件",
-                    window
-                )
+        # 如果是首次登录，显示欢迎信息
+        if not is_logged_in and user_data:
+            user_info = user_data.get('user_info', {})
+            nickname = user_info.get('nickname', logged_phone)
+            phone = user_info.get('phone', logged_phone)
+            
+            show_message_box_with_icon(
+                "information", "欢迎使用", 
+                f"🎉 欢迎使用{APP_NAME}！\n\n"
+                f"登录账号：{phone}\n"
+                f"昵称：{nickname if nickname else '未设置'}\n\n"
+                f"感谢您使用我们的产品！\n\n"
+                f"功能说明：\n"
+                f"• 音频提取：从视频文件中提取高质量音频\n"
+                f"• 字幕重命名：智能匹配并重命名字幕文件",
+                window
+            )
         
         window.show()
         
