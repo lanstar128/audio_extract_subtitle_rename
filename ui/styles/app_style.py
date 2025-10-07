@@ -432,3 +432,6 @@ QGroupBox::title {
 }
 """
 
+
+
+

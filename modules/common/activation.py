@@ -263,3 +263,5 @@ class ActivationManager:
         except Exception:
             return False
 
+
+
