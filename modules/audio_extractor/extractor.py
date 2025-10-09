@@ -184,7 +184,7 @@ class AudioExtractor(QThread):
         检测伪立体声 - 使用-50dB阈值
         检测策略：
         1. 视频≥1分钟检测前1分钟，<1分钟检测10秒
-        2. 检测位置：开头→中间→结尾
+        2. 检测位置：只检测一个位置（优先中间位置）
         3. 阈值判断：-50dB为静音，-80dB为完全静音
         """
         try:
@@ -196,47 +196,33 @@ class AudioExtractor(QThread):
             else:
                 detection_duration = min(10, max(5, duration))  # 10秒或实际时长
             
-            # 检测位置策略：开头→中间→结尾
-            detection_positions = [
-                ("开头", 0),
-            ]
+            # 确定检测位置：优先选择中间位置，如果视频太短则选择开头
+            if duration > detection_duration * 1.5:
+                # 视频足够长，检测中间位置
+                start_time = max(0, (duration - detection_duration) / 2)
+                position_name = "中间"
+            else:
+                # 视频较短，检测开头
+                start_time = 0
+                position_name = "开头"
             
-            # 如果视频够长，添加中间和结尾位置
-            if duration > detection_duration * 2:
-                middle_start = max(0, (duration - detection_duration) / 2)
-                detection_positions.append(("中间", middle_start))
+            # 执行检测
+            left_vol, right_vol = self._detect_position_volumes(
+                video_file, stream_info.stream_index, start_time, detection_duration
+            )
             
-            if duration > detection_duration:
-                end_start = max(0, duration - detection_duration)
-                detection_positions.append(("结尾", end_start))
+            print(f"[音频检测] {video_file.name} - {position_name}位置({start_time:.1f}s): 左={left_vol:.1f}dB, 右={right_vol:.1f}dB")
+            self.logger.info(f"音频检测 - {position_name}: 左={left_vol:.1f}dB, 右={right_vol:.1f}dB")
             
-            # 逐个位置检测，找到第一个有有效音频的位置
-            for position_name, start_time in detection_positions:
-                left_vol, right_vol = self._detect_position_volumes(
-                    video_file, stream_info.stream_index, start_time, detection_duration
-                )
-                
-                print(f"[音频检测] {video_file.name} - {position_name}位置({start_time:.1f}s): 左={left_vol:.1f}dB, 右={right_vol:.1f}dB")
-                self.logger.info(f"音频检测 - {position_name}: 左={left_vol:.1f}dB, 右={right_vol:.1f}dB")
-                
-                # 检查是否找到有效音频（任一声道 > -80dB）
-                if left_vol > self.COMPLETE_SILENCE_THRESHOLD or right_vol > self.COMPLETE_SILENCE_THRESHOLD:
-                    audio_type = self._determine_audio_type(left_vol, right_vol)
-                    print(f"[音频判断] {audio_type} (阈值: {self.SILENCE_THRESHOLD}dB)")
-                    
-                    return VolumeAnalysis(
-                        left_volume=left_vol,
-                        right_volume=right_vol,
-                        audio_type=audio_type,
-                        detection_position=position_name
-                    )
+            # 判断音频类型
+            audio_type = self._determine_audio_type(left_vol, right_vol)
+            print(f"[音频判断] {audio_type} (阈值: {self.SILENCE_THRESHOLD}dB)")
             
-            # 所有位置都没有找到有效音频
             return VolumeAnalysis(
                 left_volume=left_vol,
                 right_volume=right_vol,
-                audio_type="no_audio",
-                detection_position="全部位置"
+                audio_type=audio_type,
+                detection_position=position_name
             )
             
         except Exception as e:
