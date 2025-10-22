@@ -116,9 +116,15 @@ class SubtitleRenamer:
             return best_video, best_match, best_ratio
         return None
     
-    def scan_files(self, root: Path) -> Tuple[List[FileItem], List[FileItem]]:
-        """扫描视频和字幕文件"""
-        videos, subs = [], []
+    def scan_files(self, root: Path) -> Dict[Path, Tuple[List[FileItem], List[FileItem]]]:
+        """扫描视频和字幕文件，按目录分组
+        
+        Returns:
+            Dict[Path, Tuple[List[FileItem], List[FileItem]]]: 
+            键为目录路径，值为 (视频文件列表, 字幕文件列表)
+        """
+        # 按目录分组存储文件
+        dir_files: Dict[Path, Tuple[List[FileItem], List[FileItem]]] = {}
         
         for p in root.rglob('*'):
             if not p.is_file():
@@ -126,21 +132,29 @@ class SubtitleRenamer:
             
             ext = p.suffix.lower()
             if ext in VIDEO_EXTENSIONS | SUBTITLE_EXTENSIONS:
+                # 获取文件所在目录
+                parent_dir = p.parent
+                
+                # 初始化该目录的列表
+                if parent_dir not in dir_files:
+                    dir_files[parent_dir] = ([], [])
+                
                 item = FileItem(
                     path=p, 
                     stem=p.stem, 
                     ext=ext
                 )
                 
+                videos, subs = dir_files[parent_dir]
                 if ext in VIDEO_EXTENSIONS:
                     videos.append(item)
                 else:
                     subs.append(item)
         
-        return videos, subs
+        return dir_files
     
     def build_plan(self, videos: List[FileItem], subs: List[FileItem]) -> List[PlanRow]:
-        """构建重命名计划"""
+        """构建单个目录的重命名计划"""
         plan: List[PlanRow] = []
         
         # 为视频文件建立索引，便于查找
@@ -216,6 +230,25 @@ class SubtitleRenamer:
                     ))
         
         return plan
+    
+    def build_plan_from_grouped(self, dir_files: Dict[Path, Tuple[List[FileItem], List[FileItem]]]) -> List[PlanRow]:
+        """从按目录分组的文件构建重命名计划
+        
+        Args:
+            dir_files: 按目录分组的文件字典，键为目录路径，值为 (视频文件列表, 字幕文件列表)
+        
+        Returns:
+            所有目录的重命名计划列表
+        """
+        all_plans: List[PlanRow] = []
+        
+        # 对每个目录分别处理
+        for directory, (videos, subs) in dir_files.items():
+            # 为该目录构建重命名计划
+            dir_plan = self.build_plan(videos, subs)
+            all_plans.extend(dir_plan)
+        
+        return all_plans
     
     def execute_plan(self, plan: List[PlanRow], root_dir: Path) -> Tuple[int, int, List[str]]:
         """执行重命名计划

@@ -663,11 +663,15 @@ class MainWindow(QMainWindow):
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         
         try:
-            videos, subs = self.subtitle_renamer.scan_files(self.subtitle_root_dir)
-            self.subtitle_plan = self.subtitle_renamer.build_plan(videos, subs)
+            dir_files = self.subtitle_renamer.scan_files(self.subtitle_root_dir)
+            self.subtitle_plan = self.subtitle_renamer.build_plan_from_grouped(dir_files)
             self.populate_subtitle_table(self.subtitle_plan)
             self.subtitle_apply_btn.setEnabled(any(r.target_name for r in self.subtitle_plan))
-            self.status_bar.showMessage(f"扫描完成：视频 {len(videos)} 个，字幕 {len(subs)} 个。")
+            
+            # 统计所有目录的视频和字幕总数
+            total_videos = sum(len(videos) for videos, subs in dir_files.values())
+            total_subs = sum(len(subs) for videos, subs in dir_files.values())
+            self.status_bar.showMessage(f"扫描完成：视频 {total_videos} 个，字幕 {total_subs} 个。")
         finally:
             QApplication.restoreOverrideCursor()
     
