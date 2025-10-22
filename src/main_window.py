@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (QMainWindow, QTabWidget, QVBoxLayout, QHBoxLayout,
                              QTextEdit, QFileDialog, QCheckBox, QSpinBox, QGroupBox,
                              QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView,
                              QStatusBar, QFrame, QApplication, QDialog, QMenu)
-from PyQt6.QtCore import QTimer, Qt, QUrl
+from PyQt6.QtCore import QTimer, Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QIcon, QDesktopServices, QDragEnterEvent, QDropEvent, QColor
 
 from config.app_config import APP_NAME, APP_VERSION, get_images_path
@@ -29,6 +29,62 @@ from modules.subtitle_renamer.renamer import SubtitleRenamer, PlanRow, truncate_
 from modules.common.utils import find_ffmpeg, find_ffprobe
 
 
+class DragDropLineEdit(QLineEdit):
+    """支持拖拽的文本框基类"""
+    paths_dropped = pyqtSignal(list)  # 拖入路径列表信号
+    
+    def __init__(self, *args, accept_files=False, accept_folders=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setAcceptDrops(True)
+        self.accept_files = accept_files
+        self.accept_folders = accept_folders
+    
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """拖拽进入事件"""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+    
+    def dropEvent(self, event: QDropEvent):
+        """拖拽释放事件"""
+        urls = event.mimeData().urls()
+        if not urls:
+            return
+        
+        valid_paths = []
+        for url in urls:
+            path = Path(url.toLocalFile())
+            
+            # 检查路径是否存在
+            if not path.exists():
+                continue
+            
+            # 根据配置决定接受文件还是文件夹
+            if path.is_file() and self.accept_files:
+                valid_paths.append(path)
+            elif path.is_dir() and self.accept_folders:
+                valid_paths.append(path)
+        
+        if valid_paths:
+            self.paths_dropped.emit(valid_paths)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+
+class AudioExtractorLineEdit(DragDropLineEdit):
+    """音频提取专用输入框（支持文件和文件夹）"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, accept_files=True, accept_folders=True, **kwargs)
+
+
+class SubtitleFolderLineEdit(DragDropLineEdit):
+    """字幕重命名专用输入框（只支持文件夹）"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, accept_files=False, accept_folders=True, **kwargs)
+
+
 class MainWindow(QMainWindow):
     """主应用程序窗口"""
     
@@ -37,7 +93,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setMinimumSize(1000, 700)
         self.resize(1000, 800)
-        self.setAcceptDrops(True)
         
         # 设置窗口图标
         icon_path = get_images_path() / "logo.ico"
@@ -79,6 +134,21 @@ class MainWindow(QMainWindow):
         msg.setWindowIcon(self._get_icon())
         msg.setWindowTitle(title)
         msg.setText(text)
+        
+        # 设置消息框字体大小和颜色
+        font = msg.font()
+        font.setPointSize(11)
+        msg.setFont(font)
+        
+        # 设置文本颜色为黑色，确保在浅色背景下清晰可见
+        msg.setStyleSheet("""
+            QMessageBox {
+                background-color: white;
+            }
+            QLabel {
+                color: black;
+            }
+        """)
         
         if message_type == "information":
             msg.setIcon(QMessageBox.Icon.Information)
@@ -137,8 +207,9 @@ class MainWindow(QMainWindow):
         # 素材文件夹选择
         input_layout = QHBoxLayout()
         input_layout.addWidget(QLabel("素材文件夹："))
-        self.audio_input_path_edit = QLineEdit()
-        self.audio_input_path_edit.setPlaceholderText("选择包含视频文件的文件夹...")
+        self.audio_input_path_edit = AudioExtractorLineEdit()
+        self.audio_input_path_edit.setPlaceholderText("选择包含视频文件的文件夹，或直接拖入文件/文件夹...")
+        self.audio_input_path_edit.paths_dropped.connect(self.on_audio_input_paths_dropped)
         self.audio_input_browse_btn = QPushButton("浏览...")
         self.audio_input_browse_btn.setObjectName("browse_btn")
         self.audio_input_browse_btn.clicked.connect(self.browse_audio_input_folder)
@@ -283,8 +354,9 @@ class MainWindow(QMainWindow):
         
         # 顶部：选择目录 + 选项
         top = QHBoxLayout()
-        self.subtitle_dir_edit = QLineEdit()
+        self.subtitle_dir_edit = SubtitleFolderLineEdit()
         self.subtitle_dir_edit.setPlaceholderText("选择素材库文件夹，或直接把文件夹拖到这里…")
+        self.subtitle_dir_edit.paths_dropped.connect(self.on_subtitle_folder_dropped)
         subtitle_browse_btn = QPushButton("浏览…")
         subtitle_browse_btn.setObjectName("browse_btn")
         subtitle_browse_btn.clicked.connect(self.browse_subtitle_folder)
@@ -343,29 +415,49 @@ class MainWindow(QMainWindow):
         
         return tab
     
-    # ===== 拖拽支持 =====
-    def dragEnterEvent(self, e: QDragEnterEvent):
-        if e.mimeData().hasUrls():
-            e.acceptProposedAction()
-    
-    def dropEvent(self, e: QDropEvent):
-        urls = e.mimeData().urls()
-        if not urls:
+    # ===== 音频提取相关方法 =====
+    def on_audio_input_paths_dropped(self, paths):
+        """处理音频提取输入框拖入的路径（支持文件和文件夹）"""
+        if not paths:
             return
         
-        path = Path(urls[0].toLocalFile())
-        if path.is_dir():
-            # 根据当前标签页设置不同的路径
-            current_tab = self.tab_widget.currentIndex()
-            if current_tab == 0:  # 音频提取标签页
-                self.audio_input_path_edit.setText(str(path))
-                self.status_bar.showMessage(f"已选择音频提取素材文件夹：{path}")
-            elif current_tab == 1:  # 字幕重命名标签页
-                self.subtitle_root_dir = path
-                self.subtitle_dir_edit.setText(str(path))
-                self.status_bar.showMessage(f"已选择字幕重命名文件夹：{path}")
+        # 统计文件和文件夹数量
+        files = [p for p in paths if p.is_file()]
+        folders = [p for p in paths if p.is_dir()]
+        
+        # 显示拖入的内容摘要
+        if len(paths) == 1:
+            # 单个文件或文件夹
+            path = paths[0]
+            self.audio_input_path_edit.setText(str(path))
+            if path.is_file():
+                self.status_bar.showMessage(f"已选择视频文件：{path.name}")
+            else:
+                self.status_bar.showMessage(f"已选择文件夹：{path.name}")
+        else:
+            # 多个文件/文件夹，显示第一个路径的父目录
+            # 如果都在同一个文件夹内，显示该文件夹
+            parent_dirs = set(p.parent for p in paths)
+            if len(parent_dirs) == 1:
+                # 所有文件在同一目录
+                parent_dir = list(parent_dirs)[0]
+                self.audio_input_path_edit.setText(str(parent_dir))
+                msg_parts = []
+                if files:
+                    msg_parts.append(f"{len(files)}个文件")
+                if folders:
+                    msg_parts.append(f"{len(folders)}个文件夹")
+                self.status_bar.showMessage(f"已选择{parent_dir.name}目录（包含{', '.join(msg_parts)}）")
+            else:
+                # 来自不同目录，显示第一个路径
+                self.audio_input_path_edit.setText(str(paths[0]))
+                msg_parts = []
+                if files:
+                    msg_parts.append(f"{len(files)}个文件")
+                if folders:
+                    msg_parts.append(f"{len(folders)}个文件夹")
+                self.status_bar.showMessage(f"已选择{', '.join(msg_parts)}")
     
-    # ===== 音频提取相关方法 =====
     def browse_audio_input_folder(self):
         """浏览选择音频提取输入文件夹"""
         folder = QFileDialog.getExistingDirectory(
@@ -640,6 +732,18 @@ class MainWindow(QMainWindow):
         scrollbar.setValue(scrollbar.maximum())
     
     # ===== 字幕重命名相关方法 =====
+    def on_subtitle_folder_dropped(self, paths):
+        """处理字幕重命名输入框拖入的文件夹（只支持文件夹）"""
+        if not paths:
+            return
+        
+        # 只取第一个文件夹
+        folder = paths[0]
+        if folder.is_dir():
+            self.subtitle_root_dir = folder
+            self.subtitle_dir_edit.setText(str(folder))
+            self.status_bar.showMessage(f"已选择字幕重命名文件夹：{folder.name}")
+    
     def browse_subtitle_folder(self):
         """浏览选择字幕重命名文件夹"""
         d = QFileDialog.getExistingDirectory(self, "选择素材库文件夹")
@@ -894,6 +998,21 @@ def show_message_box_with_icon(message_type, title, text, parent=None):
     msg.setWindowIcon(icon)
     msg.setWindowTitle(title)
     msg.setText(text)
+    
+    # 设置消息框字体大小和颜色
+    font = msg.font()
+    font.setPointSize(11)
+    msg.setFont(font)
+    
+    # 设置文本颜色为黑色，确保在浅色背景下清晰可见
+    msg.setStyleSheet("""
+        QMessageBox {
+            background-color: white;
+        }
+        QLabel {
+            color: black;
+        }
+    """)
     
     if message_type == "information":
         msg.setIcon(QMessageBox.Icon.Information)
