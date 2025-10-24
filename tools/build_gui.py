@@ -507,35 +507,43 @@ class BuildToolGUI(QMainWindow):
     def load_config(self):
         """加载配置"""
         try:
-            # 读取version_info.txt
+            # 首先尝试从app_config.py读取当前版本（这是软件实际使用的版本）
+            app_config_file = self.project_root / 'config' / 'app_config.py'
+            if app_config_file.exists():
+                content = app_config_file.read_text(encoding='utf-8')
+                
+                # 解析APP_VERSION
+                version_match = re.search(r'APP_VERSION\s*=\s*["\'](\d+)\.(\d+)\.(\d+)(?:-(.+?))?["\']', content)
+                if version_match:
+                    self.major_version.setText(version_match.group(1))
+                    self.minor_version.setText(version_match.group(2))
+                    self.patch_version.setText(version_match.group(3))
+                    if version_match.group(4):
+                        self.build_label.setText(version_match.group(4))
+                
+                # 解析APP_NAME
+                app_name_match = re.search(r'APP_NAME\s*=\s*["\'](.+?)["\']', content)
+                if app_name_match:
+                    self.app_name.setText(app_name_match.group(1))
+                
+                # 解析APP_AUTHOR
+                author_match = re.search(r'APP_AUTHOR\s*=\s*["\'](.+?)["\']', content)
+                if author_match:
+                    self.company_name.setText(author_match.group(1))
+            
+            # 读取version_info.txt补充描述信息
             if self.version_info_file.exists():
                 content = self.version_info_file.read_text(encoding='utf-8')
-                
-                # 解析版本号
-                filevers_match = re.search(r'filevers=\((\d+),(\d+),(\d+),(\d+)\)', content)
-                if filevers_match:
-                    self.major_version.setText(filevers_match.group(1))
-                    self.minor_version.setText(filevers_match.group(2))
-                    self.patch_version.setText(filevers_match.group(3))
-                
-                # 解析应用信息
-                company_match = re.search(r"StringStruct\(u'CompanyName', u'(.+?)'\)", content)
-                if company_match:
-                    self.company_name.setText(company_match.group(1))
                 
                 desc_match = re.search(r"StringStruct\(u'FileDescription', u'(.+?)'\)", content)
                 if desc_match:
                     self.description.setText(desc_match.group(1))
-                
-                product_match = re.search(r"StringStruct\(u'ProductName', u'(.+?)'\)", content)
-                if product_match:
-                    self.app_name.setText(product_match.group(1))
             
-            # 读取setup.iss
+            # 读取setup.iss补充英文名称和域名
             if self.setup_iss_file.exists():
                 content = self.setup_iss_file.read_text(encoding='utf-8')
                 
-                # 解析英文名称和域名（从AppName中提取）
+                # 解析英文名称
                 app_name_match = re.search(r'AppName=(.+)', content)
                 if app_name_match:
                     self.app_name_en.setText(app_name_match.group(1).strip())
@@ -543,15 +551,10 @@ class BuildToolGUI(QMainWindow):
                 # 解析域名
                 url_match = re.search(r'AppPublisherURL=(.+)', content)
                 if url_match and url_match.group(1).strip():
-                    self.domain.setText(url_match.group(1).strip())
-                
-                # 解析构建标识（从版本号中提取）
-                version_match = re.search(r'AppVersion=(\d+\.\d+\.\d+)', content)
-                if version_match:
-                    # 检查是否有构建标识
-                    output_match = re.search(r'OutputBaseFilename=.*?_v\d+\.\d+\.\d+(?:-(.+?))?_', content)
-                    if output_match and output_match.group(1):
-                        self.build_label.setText(output_match.group(1))
+                    domain_url = url_match.group(1).strip()
+                    # 移除https://前缀
+                    domain_url = domain_url.replace('https://', '').replace('http://', '')
+                    self.domain.setText(domain_url)
             
             self.append_log("配置加载成功")
             
@@ -585,6 +588,9 @@ class BuildToolGUI(QMainWindow):
             
             # 更新setup.iss
             self.update_setup_iss(major, minor, patch, build, app_name_en, company, domain)
+            
+            # 更新app_config.py中的版本号
+            self.update_app_config(app_name, version_display, company)
             
             if show_message:
                 QMessageBox.information(self, "成功", "版本配置已更新！")
@@ -644,6 +650,36 @@ VSVersionInfo(
 )
 """
         self.version_info_file.write_text(content, encoding='utf-8')
+    
+    def update_app_config(self, app_name, version_display, company):
+        """更新config/app_config.py中的版本号"""
+        app_config_file = self.project_root / 'config' / 'app_config.py'
+        
+        if app_config_file.exists():
+            content = app_config_file.read_text(encoding='utf-8')
+            
+            # 更新APP_NAME
+            content = re.sub(
+                r'APP_NAME\s*=\s*["\'].*?["\']',
+                f'APP_NAME = "{app_name}"',
+                content
+            )
+            
+            # 更新APP_VERSION
+            content = re.sub(
+                r'APP_VERSION\s*=\s*["\'].*?["\']',
+                f'APP_VERSION = "{version_display}"',
+                content
+            )
+            
+            # 更新APP_AUTHOR
+            content = re.sub(
+                r'APP_AUTHOR\s*=\s*["\'].*?["\']',
+                f'APP_AUTHOR = "{company}"',
+                content
+            )
+            
+            app_config_file.write_text(content, encoding='utf-8')
     
     def update_setup_iss(self, major, minor, patch, build, app_name_en, company, domain):
         """更新setup.iss"""
